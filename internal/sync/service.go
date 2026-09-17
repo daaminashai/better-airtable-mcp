@@ -692,14 +692,26 @@ func (s *Service) shouldUseStaging(baseID string) bool {
 		return false
 	}
 
-	info, err := duckdb.ReadSyncInfo(context.Background(), s.basePath(baseID))
+	info, err := s.readSyncInfo(context.Background(), baseID)
 	if err != nil {
 		return false
 	}
 	return !info.LastSyncedAt.IsZero() && info.Status == "completed"
 }
 
+// readSyncInfo reads the active snapshot's sync metadata under the read lock,
+// so it never opens the file while a writer or the staging swap holds it.
+func (s *Service) readSyncInfo(ctx context.Context, baseID string) (duckdb.SyncInfo, error) {
+	unlock := s.lockDuckRead(baseID)
+	defer unlock()
+	return duckdb.ReadSyncInfo(ctx, s.basePath(baseID))
+}
+
 func (s *Service) markActiveSyncFailed(ctx context.Context, baseID string, progress SyncProgress, syncErr error) error {
+	// A read-write handle must never coexist with readers' read-only handles on
+	// the same file in this process.
+	unlock := s.lockDuckWrite(baseID)
+	defer unlock()
 	return duckdb.UpdateSyncFailure(ctx, s.basePath(baseID), duckdb.SyncInfo{
 		SyncStartedAt:        progress.SyncStartedAt,
 		LastSyncedAt:         progress.LastSyncedAt,

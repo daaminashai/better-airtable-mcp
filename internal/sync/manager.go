@@ -563,7 +563,7 @@ func (w *workerState) seedFromSnapshot() {
 	}
 
 	w.readable = true
-	info, err := duckdb.ReadSyncInfo(context.Background(), path)
+	info, err := w.manager.service.readSyncInfo(context.Background(), w.baseID)
 	if err != nil {
 		return
 	}
