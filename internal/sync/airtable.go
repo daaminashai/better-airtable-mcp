@@ -25,12 +25,13 @@ import (
 const defaultAPIBaseURL = "https://api.airtable.com"
 
 // Airtable's documented per-base rate limit is 5 req/s. We run below that to
-// leave headroom for clock skew between client and server, and we use a token
-// bucket (rather than strict spacing) so brief bursts can drain the burst
-// budget while sustained traffic settles to the steady-state rate.
+// leave headroom for clock skew between client and server. The burst must stay
+// at 1: a token bucket admits burst + rate requests in its first second, and a
+// sync opens with the schema plus every table's first page at once, so any
+// larger burst overshoots 5 req/s and earns a 30s 429 penalty on every run.
 const (
 	defaultBaseRateLimit = rate.Limit(4)
-	defaultBaseRateBurst = 4
+	defaultBaseRateBurst = 1
 
 	// 6 attempts is 5 retries. With Airtable's 30s Retry-After hint and the
 	// exponential schedule below, the worst-case total wait per request is
