@@ -562,7 +562,15 @@ func (s *Service) runSync(ctx context.Context, tokens AccessTokenFunc, base Base
 		pendingTables := len(plans)
 		var totalVisibleRecords int64
 		for pendingTables > 0 {
-			result := <-results
+			var result syncPageResult
+			select {
+			case result = <-results:
+			case <-ctx.Done():
+				// Workers bail out on workerCtx.Done() without sending a result,
+				// so a bare receive here would block forever once the run times
+				// out. Treat the deadline like any other page error.
+				result = syncPageResult{Err: fmt.Errorf("sync run aborted: %w", ctx.Err())}
+			}
 			if result.Err != nil {
 				cancel()
 				close(jobs)
